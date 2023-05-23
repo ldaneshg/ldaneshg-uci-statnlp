@@ -7,6 +7,9 @@ def train_classifier(X, y):
 	"""
 	from sklearn.linear_model import LogisticRegression
 	cls = LogisticRegression()
+	cls.solver = "newton-cg"
+	cls.C = 10
+	#cls.multi_class = "multinomial"
 	cls.fit(X, y)
 	return cls
 
@@ -16,3 +19,4 @@ def evaluate(X, yt, cls):
 	yp = cls.predict(X)
 	acc = metrics.accuracy_score(yt, yp)
 	print("  Accuracy", acc)
+	return acc

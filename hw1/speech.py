@@ -1,4 +1,11 @@
 #!/bin/python
+import scipy.sparse as sp
+import numpy as np
+import sklearn
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+#import tensorflow_text as tf
+from scipy.fftpack import fft
 
 def read_files(tarfname):
 	"""Read the training and development data from the speech tar file.
@@ -27,16 +34,35 @@ def read_files(tarfname):
 	speech.dev_data, speech.dev_fnames, speech.dev_labels = read_tsv(tar, "dev.tsv")
 	print(len(speech.dev_data))
 	print("-- transforming data and labels")
-	from sklearn.feature_extraction.text import CountVectorizer
-	speech.count_vect = CountVectorizer()
+	regex1 = '[a-zA-Z]{1,8}'
+	speech.count_vect = CountVectorizer(token_pattern=regex1)#stop_words="english")#, binary=True)
+	#speech.count_vect.ngram_range = (1, 6)
 	speech.trainX = speech.count_vect.fit_transform(speech.train_data)
+	#tfidf = TfidfTransformer()
+	#temp = tfidf.fit_transform(speech.trainX)
+	#speech.trainX = sp.hstack((speech.trainX.astype('float64'), temp), format='csr')
 	speech.devX = speech.count_vect.transform(speech.dev_data)
+	#temp2 = tfidf.fit_transform(speech.devX)
+	#speech.devX = sp.hstack((speech.devX.astype('float64'), temp2), format='csr')
 	from sklearn import preprocessing
 	speech.le = preprocessing.LabelEncoder()
 	speech.le.fit(speech.train_labels)
 	speech.target_labels = speech.le.classes_
 	speech.trainy = speech.le.transform(speech.train_labels)
 	speech.devy = speech.le.transform(speech.dev_labels)
+
+	testing = np.zeros((19,speech.trainX.shape[1]))
+	test2 = np.zeros((19,speech.devX.shape[1]))
+	for j in range(19):
+		testing[j,:] = np.sum(speech.trainX[np.where(speech.trainy == j)[0]], axis=0)
+		#test2[j,:] = np.sum(speech.devX[np.where(speech.devy == j)[0]], axis=0)
+	que = np.matmul(speech.trainX.toarray(),testing.T)/10
+	#speech.trainX = sp.hstack((speech.trainX, que), format='csr')
+	que2 = np.matmul(speech.devX.toarray(), testing.T)/10
+	#speech.devX = sp.hstack((speech.devX, que2), format='csr')
+	#speech.trainX = que/10
+	#speech.devX = que2/10
+
 	tar.close()
 	return speech
 
@@ -161,15 +187,84 @@ if __name__ == "__main__":
 	speech = read_files(tarfname)
 	print("Training classifier")
 	import classify
+
+	"""for i in range(10):
+		exclude = speech.trainX[437*(i):437*(i+1),:]
+		excl_labels = speech.trainy[437*(i):437*(i+1)]
+		include = speech.trainX.copy()
+		incl_labels = speech.trainy.copy()
+		mask = np.ones(include.shape, dtype=bool)
+		mask[437*(i):437*(i+1),:] = False
+		include = include[np.where(mask.any(axis=1))]
+		mask = np.ones(incl_labels.shape, dtype=bool)
+		mask[437 * (i):437 * (i + 1)] = False
+		incl_labels = incl_labels[mask]
+		cls = classify.train_classifier(include, incl_labels)
+		print(i)
+		classify.evaluate(include, incl_labels, cls)
+		#classify.evaluate(sp.vstack((speech.devX, exclude), format='csr'), np.concatenate([speech.devy, excl_labels]), cls)
+		classify.evaluate(exclude, excl_labels, cls)"""
+
+	print(speech.trainX.shape)
+	#cls = classify.train_classifier(speech.trainX, speech.trainy)
+	#speech.trainX = speech.trainX[:,np.where((np.absolute(cls.coef_) > 0.25 ).any(axis=0))[0]]
+	#speech.devX = speech.devX[:,np.where((np.absolute(cls.coef_) > 0.25 ).any(axis=0))[0]]
+	#print(speech.trainX.shape)
 	cls = classify.train_classifier(speech.trainX, speech.trainy)
+	#cls2 = sklearn.base.clone(cls)
+	#cls2.fit(speech.trainX, speech.trainy)
 	print("Evaluating")
 	classify.evaluate(speech.trainX, speech.trainy, cls)
 	classify.evaluate(speech.devX, speech.devy, cls)
 
+
 	print("Reading unlabeled data")
 	unlabeled = read_unlabeled(tarfname, speech)
+	#tfidf = TfidfTransformer()
+	#unlabeled.X = sp.hstack((unlabeled.X.astype('float64'), tfidf.fit_transform(unlabeled.X)), format='csr')
+	#unlabeled.X = unlabeled.X[:, np.where((np.absolute(cls.coef_) > 0.40).any(axis=0))[0]]
+
+	for i in range(5):
+
+		samples = unlabeled.X[0:4000,:]
+		prob = cls.predict_proba(samples)
+		samples = samples[np.where((prob > (0.60)).any(axis=1))]
+		pred_labels = cls.predict(samples)
+		temp = np.concatenate([speech.trainy, pred_labels])
+		cls = classify.train_classifier(sp.vstack((speech.trainX, samples), format='csr'), temp)
+		#acc = classify.evaluate(speech.devX, speech.devy, cls)
+		print(i)
+
+	"""for i in range(3):
+		samples = unlabeled.X[0:21671,:]
+		samples2 = unlabeled.X[21671:43342,:]
+		prob = cls.predict_proba(samples)
+		prob2 = cls2.predict_proba(samples2)
+		samples = samples[np.where((prob > (0.90)).any(axis=1))]
+		#samples2 = samples2[np.where((prob2 > (0.90)).any(axis=1))]
+		print(samples.shape)
+		pred_labels = cls.predict(samples)
+		pred_labels2 = cls2.predict(samples2)
+		temp = np.concatenate([speech.trainy, pred_labels])
+		temp2 = np.concatenate([speech.trainy, pred_labels2])
+		cls = classify.train_classifier(sp.vstack((speech.trainX, samples), format='csr'), temp)
+		cls2 = classify.train_classifier(sp.vstack((speech.trainX, samples2), format='csr'), temp2)
+		prob = cls.predict_proba(unlabeled.X)
+		prob2 = cls2.predict_proba(unlabeled.X)
+		samples = unlabeled.X[np.where(((prob > (0.50)).any(axis=1)) & ((prob2 > (0.50)).any(axis=1)))]
+		pred_labels = cls.predict(samples)
+		temp = np.concatenate([speech.trainy, pred_labels])
+		cls = classify.train_classifier(sp.vstack((speech.trainX, samples), format='csr'), temp)"""
+
+	speech.trainX = sp.vstack((speech.trainX, samples), format='csr')
+	speech.trainy = np.concatenate([speech.trainy, pred_labels])
+	#cls = classify.train_classifier(speech.trainX, temp)
+	print("Evaluating")
+	classify.evaluate(speech.trainX, speech.trainy, cls)
+	classify.evaluate(speech.devX, speech.devy, cls)
 	print("Writing pred file")
 	write_pred_kaggle_file(unlabeled, cls, "data/speech-pred.csv", speech)
+	coef = cls.coef_[0]
 
 	# You can't run this since you do not have the true labels
 	# print "Writing gold file"
