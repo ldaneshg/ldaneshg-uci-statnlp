@@ -36,7 +36,7 @@ class InterpNgram(LangModel):
         self.backoff_model.incr_word(context, word)
 
     def cond_logprob(self, word: str, context: List[str]) -> float:
-        context = self.model.get_context(context)
+        curr_context = self.model.get_context(context)
 
         logprob = 0
         # ---------------------------------------------------------------------
@@ -59,6 +59,32 @@ class InterpNgram(LangModel):
         # the log again, a more stable operation is to apply logsumexp or, in
         # numpy, the `np.logaddexp`.
         # ---------------------------------------------------------------------
-        raise NotImplementedError("TO BE IMPLEMENTED BY THE STUDENT")
+        current_model = self
+        while current_model.model.counts_totals.get(curr_context, None) is None:
+            current_model = current_model.backoff_model
+            if current_model.ngram_size == 1:
+                curr_context = current_model.get_context(context)
+                break
+            curr_context = current_model.model.get_context(context)
+
+        kgram_size = current_model.ngram_size
+        interp_list = []
+        for i in range(kgram_size):
+            interp_list.append(current_model)
+            if i == kgram_size - 1:
+                break
+            current_model = current_model.backoff_model
+
+        curr_context = interp_list[kgram_size - 1].get_context(context)
+        kgram_prob = []
+        kgram_prob.append(np.exp(interp_list[kgram_size - 1].cond_logprob(word,curr_context)))
+
+        for j in range(kgram_size - 1):
+            curr_context = interp_list[kgram_size - 2 - j].model.get_context(context)
+            a = interp_list[kgram_size - 2 - j].alpha
+            kgram_prob.append(a * np.exp(interp_list[kgram_size - 2 - j].model.cond_logprob(word,curr_context)) + (1 - a) * kgram_prob[j])
+
+        logprob = np.log(kgram_prob[kgram_size - 1])
+        #raise NotImplementedError("TO BE IMPLEMENTED BY THE STUDENT")
         # ---------------------------------------------------------------------
         return logprob
