@@ -269,8 +269,15 @@ def top_k_sampling(
         #   * Scale `last_id_probs` via temperature-scaling via the
         #  ``temperature`` parameter
         # ---------------------------------------------------------------------
-        raise NotImplementedError("TODO: Implement by student")
-
+        k: int = top_k
+        potential_cands = potential_cands[0:top_k]
+        last_id_probs = last_id_probs[0:top_k]
+        scale_temp = lambda val: np.exp(val/temperature)
+        temp_list = [scale_temp(i) for i in last_id_probs]
+        last_id_probs = temp_list / sum(temp_list)
+        if not len(potential_cands):  # list is empty
+            return cand
+        #raise NotImplementedError("TODO: Implement by student")
         # ---------------------------------------------------------------------
         # Sample a candidate based on the probability of it's last ID
         # random.choices() automatically re-weights the probabilities!
@@ -331,8 +338,22 @@ def nucleus_sampling(
         #  * Update `potential_cands` and `last_id_probs` by truncating
         #    everything past this cutoff point.
         # ---------------------------------------------------------------------
-        raise NotImplementedError("TODO: Implement by student")
+        p_sum = 0
+        idx = -1
+        for id_prob in last_id_probs:
+            p_sum += id_prob
+            idx += 1
+            if p_sum >= top_p:
+                break
 
+        length = len(potential_cands) - 1
+        for i in range(length - idx):
+            potential_cands.pop(len(potential_cands) - 1)
+            last_id_probs.pop(len(last_id_probs) - 1)
+
+        if not len(potential_cands): #list is empty
+            return cand
+        #raise NotImplementedError("TODO: Implement by student")
         # ---------------------------------------------------------------------
         #  We have implemented the part of sampling the next candidate given
         #  the truncated `potential_cands` and `last_id_probs` so you
@@ -387,8 +408,26 @@ def constrained_decoding(
         #   * Sort by the log probability of the remaining options and name it
         #     potential_cands.
         # ---------------------------------------------------------------------
-        raise NotImplementedError("TODO: Implement by student")
+        next_candidates = cand.get_next_cands(model)
+        constraint_ids = []
+        for word in constraints_list:
+            id = model.word2id(word)
+            constraint_ids.append(id)
 
+        remove_list = []
+        for cand in next_candidates:
+            set_cand = set(cand.decoded_ids)
+            set_constr = set(constraint_ids)
+            if set_cand & set_constr:
+                remove_list.append(cand)
+
+        for cand in remove_list:
+            next_candidates.remove(cand)
+        if not len(next_candidates): #list is empty
+            return cand
+        potential_cands = sorted(next_candidates, key=lambda cand: cand.log_prob, reverse=True)
+        last_id_probs = np.array([cand.last_id_prob for cand in potential_cands])
+        #raise NotImplementedError("TODO: Implement by student")
         # ---------------------------------------------------------------------
         #  We have implemented the part of sampling the next candidate given
         #  the truncated `potential_cands` and `last_id_probs` so you
@@ -439,7 +478,24 @@ def constrained_decoding_no_repetition(
         #   * Sort by the log probability of the remaining options and name it
         #     potential_cands.
         # ---------------------------------------------------------------------
-        raise NotImplementedError("TODO: Implement by student")
+        next_candidates = cand.get_next_cands(model)
+        constraint_ids = cand.decoded_ids
+
+        remove_list = []
+        for cand in next_candidates:
+            set_cand = set([cand.last_decoded_id])
+            set_constr = set(constraint_ids)
+            if set_cand & set_constr:
+                remove_list.append(cand)
+
+        for cand in remove_list:
+            next_candidates.remove(cand)
+        if not len(next_candidates): #list is empty
+            return cand
+        potential_cands = sorted(next_candidates, key=lambda cand: cand.log_prob, reverse=True)
+        last_id_probs = np.array([cand.last_id_prob for cand in potential_cands])
+
+        #raise NotImplementedError("TODO: Implement by student")
 
         # ---------------------------------------------------------------------
         #  We have implemented the part of sampling the next candidate given
