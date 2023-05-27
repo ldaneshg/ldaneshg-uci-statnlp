@@ -98,56 +98,26 @@ class Ngram(LangModel):
         #  * For the case where `context` was seen during training,
         #    compute the probability, p_model(word|context).
         # --------------------------------------------------------------
-        p_n: Dict[Tuple[str], int] = {}
-        p_uni: Dict[Tuple[str], int] = {}
-        if word not in self.vocab:
-            if self.counts[context].get(word, None) is None:
-                counts = 0
-            else:
-                counts = self.counts[context][word]
-            if self.unigram_counts.get(word) is None:
-                uni_counts = 0
-            else:
-                uni_counts = self.unigram_counts[word]
-            if self.counts_totals.get(context, None) is None:
-                total = 0
-            else:
-                total = self.counts_totals[context]
-            p_n[word] = add_lambda_smoothing(counts, total, self.llambda, self.vocab_size)
-            p_uni[word] = add_lambda_smoothing(uni_counts, self.unigram_total, self.llambda, self.vocab_size)
-            p_n[word] = np.exp(p_n[word])
-            p_uni[word] = np.exp(p_uni[word])
-
-        for w_i in self.vocab:
-            if self.unigram_counts.get(w_i) is None:
-                uni_counts = 0
-            else:
-                uni_counts = self.unigram_counts[w_i]
-            if self.counts[context].get(w_i, None) is None:
-                counts = 0
-            else:
-                counts = self.counts[context][w_i]
-            if self.counts_totals.get(context, None) is None:
-                total = 0
-            else:
-                total = self.counts_totals[context]
-            p_n[w_i] = add_lambda_smoothing(counts, total, self.llambda, self.vocab_size)
-            p_uni[w_i] = add_lambda_smoothing(uni_counts, self.unigram_total, self.llambda, self.vocab_size)
-            p_n[w_i] = np.exp(p_n[w_i])
-            p_uni[w_i] = np.exp(p_uni[w_i])
-
-        if self.counts_totals.get(context, None) is None:  # backoff to unigram if context counts 0
-            # normalize probabilities
-            x = 1.0 / sum(p_uni.values())
-            for w in p_uni:
-                p_uni[w] = p_uni[w] * x
-            logprob = np.log(p_uni[word])
+        if self.counts[context].get(word, None) is None:
+            counts = 0
         else:
-            # normalize probabilities
-            y = 1.0 / sum(p_n.values())
-            for w in p_n:
-                p_n[w] = p_n[w] * y
-            logprob = np.log(p_n[word])
+            counts = self.counts[context][word]
+        if self.unigram_counts.get(word) is None:
+            uni_counts = 0
+        else:
+            uni_counts = self.unigram_counts[word]
+        if self.counts_totals.get(context, None) is None:
+            total = 0
+        else:
+            total = self.counts_totals[context]
+        p_n = add_lambda_smoothing(counts, total, self.llambda, self.vocab_size)
+        p_uni = add_lambda_smoothing(uni_counts, self.unigram_total, self.llambda, self.vocab_size)
+        p_n = np.exp(p_n)
+        p_uni = np.exp(p_uni)
+        if self.counts_totals.get(context, None) is None:  # backoff to unigram if context counts 0
+            logprob = np.log(p_uni)
+        else:
+            logprob = np.log(p_n)
         # raise NotImplementedError("TO BE IMPLEMENTED BY THE STUDENT")
         # --------------------------------------------------------------
         return logprob
